@@ -1,87 +1,42 @@
-import pyaudio
 import wave
+from math import isclose
+import pyaudio
 from aubio import notes, source, tempo, onset
 from numpy import median, diff
 
-
-def print_tests():
-	# file = record_wav()
-	file = "hot-cross-buns.wav"
-	n = get_notes(file)
-	o = get_onsets(file)
-	b = get_bpm(file)
-	lengths = note_length(o, b)
-	all_notes = pair_value_length(n, lengths)
-
-	print("NOTES: ")
-	for i in n:
-		print(i, end=" ")
-	print()
-
-	print("ONSETS: ")
-	for i in o:
-		print(i, end=" ")
-	print()
-
-	print("BPM: ")
-	print(b)
-
-	print("LENGTHS: ")
-	for i in lengths:
-		print(i, end=" ")
-	print()
-
-	print("PAIRED NOTES AND LENGTHS: ")
-	for x, y in all_notes:
-		print("( ", x, y, " )", end=" ")
-	print()
-	print("LILY NOTE NAMES AND LENGTHS: ")
-	to_lily_pond(all_notes)
+frames = []
+# global constants defined here so record() can be looped through by a thread
+# number of frames signals are split into
+CHUNK = 1024
+FORM = pyaudio.paInt16
+SAMPLES = 2
+# frame sampling rate
+RATE = 44100
+PY_AUDIO = pyaudio.PyAudio()
+STREAM = PY_AUDIO.open(format=FORM, channels=SAMPLES, rate=RATE, input=True, frames_per_buffer=CHUNK)
 
 
-# reads input from microphone and writes to wave file
-def record_wav():
-	# number of frames signals are split into
-	chunk = 1024
-	form = pyaudio.paInt16
-	samples = 2
-	# frame sampling rate
-	rt = 44100
-	# output file of audio recording
-	wave_filename = "output.wav"
+# reads in data from stream, thread will loop when user presses record
+def record():
+	data = STREAM.read(CHUNK)
+	frames.append(data)
 
-	p = pyaudio.PyAudio()
 
-	stream = p.open(format=form, channels=samples, rate=rt, input=True, frames_per_buffer=chunk)
-
-	print("* recording")
-
-	frames = []
-
-	while True:
-		try:
-			data = stream.read(chunk)
-			frames.append(data)
-		# break with ctrl+c
-		except KeyboardInterrupt:
-			break
-
-	print("* done recording")
-
+# stops stream, terminates PyAudio instance, writes data to output.wav
+def finalize_wav():
 	# close microphone stream
-	stream.stop_stream()
-	stream.close()
-	p.terminate()
+	STREAM.stop_stream()
+	STREAM.close()
+	PY_AUDIO.terminate()
 
 	# output recording to output.wav
+	wave_filename = "output.wav"
 	wf = wave.open(wave_filename, 'wb')
-	wf.setnchannels(samples)
-	wf.setsampwidth(p.get_sample_size(form))
-	wf.setframerate(rt)
+	wf.setnchannels(SAMPLES)
+	wf.setsampwidth(PY_AUDIO.get_sample_size(FORM))
+	wf.setframerate(RATE)
 	wf.writeframes(b''.join(frames))
 	wf.close()
-
-	return wave_filename
 
 
 # returns every midi value of notes from wave file
@@ -106,8 +61,8 @@ def get_notes(file_name):
 
 	while True:
 		# extract notes from output.wav and append ot all_notes list
-		samples, read = s()
-		new_note = notes_o(samples)
+		o_samples, read = s()
+		new_note = notes_o(o_samples)
 		if new_note[0] != 0:
 			all_notes.append(new_note[0])
 		total_frames += read
@@ -135,8 +90,8 @@ def get_bpm(file_name):
 
 	while True:
 		# extract beats from .wav file
-		samples, read = s()
-		is_beat = tempo_o(samples)
+		o_samples, read = s()
+		is_beat = tempo_o(o_samples)
 		if is_beat:
 			this_beat = tempo_o.get_last_s()
 			beats.append(this_beat)
@@ -176,8 +131,8 @@ def get_onsets(file_name):
 	# total number of frames read
 	total_frames = 0
 	while True:
-		samples, read = s()
-		if onsets_o(samples):
+		o_samples, read = s()
+		if onsets_o(o_samples):
 			onsets.append(round(onsets_o.get_last_s(), 3))
 		total_frames += read
 		if read < hop_s:
@@ -186,75 +141,190 @@ def get_onsets(file_name):
 	return onsets
 
 
-# finds musical length of each note
-def note_length(onsets, beats_per):
+# finds musical length of each note where b_note is the note that gets the beat
+def note_length(onsets, beats_per, b_note):
 	# list of note lengths in the order they were played
 	note_lengths = []
-	# TODO: replace 4 with number of beats per measure
 	# calculate beats per second
-	bps = (60 / beats_per) * 4
-	for index in range(len(onsets)):
-		if index != 0:
-			note_lengths.append(round(float(onsets[index] - onsets[index-1])/bps, 2))
-		else:
-			note_lengths.append(round(float(onsets[index+1] - onsets[index])/bps, 2))
+	bps = (60 / beats_per) * b_note
+	for index in range(len(onsets)-1):
+		if index != len(onsets)-1:
+			note_lengths.append(round(float(onsets[index+1]-onsets[index])/bps, 2))
+
+	# TODO calculate actual last note length
+	note_lengths.append(0.25)
 
 	return note_lengths
 
 
+# creates tuple list with pairs of note values and note lengths
 def pair_value_length(note_values, note_lengths):
 	complete_notes = list(zip(note_values, note_lengths))
 	return complete_notes
 
 
-def to_lily_pond(complete_notes):
+# writes lily pond source code to .ly file
+def to_lily_pond(complete_notes, time_sig, clef):
+	# note values in lily code
+	lily_names = []
+	# note lengths in lily code
+	lily_lengths = []
 	for note in complete_notes:
-		print(get_lily_note_name(note[0]))
-	# TODO note lengths
+		lily_names.append(get_lily_note_name(note[0]))
+		lily_lengths.append(get_lily_note_length(note[1]))
+
+	lily_code = zip(lily_names, lily_lengths)
+
+	lily_file = open("my_lily.ly", "a")
+	lily_file.write("{\n\t\\time " + time_sig + "\n\t\\clef " + clef + "\n\t")
+
+	lily_file.write(' '.join('%s%s' % x for x in lily_code))
+
+	lily_file.write("\n}")
+	lily_file.close()
 
 
+# returns corresponding lilypond for given midi_note
+# only called if midi_note is below C3
+def get_low_oct(midi_note):
+	if midi_note == 36:
+		return "c,"
+	if midi_note == 37:
+		return "cis,"
+	if midi_note == 38:
+		return "d,"
+	if midi_note == 39:
+		return "dis,"
+	if midi_note == 40:
+		return "e,"
+	if midi_note == 41:
+		return "f,"
+	if midi_note == 42:
+		return "fis,"
+	if midi_note == 43:
+		return "g,"
+	if midi_note == 44:
+		return "gis,"
+	if midi_note == 45:
+		return "a,"
+	if midi_note == 46:
+		return "ais,"
+	if midi_note == 47:
+		return "b,"
+
+
+# returns lily pond code for corresponding midi note
 def get_lily_note_name(midi_note):
-	for i in range(24, 97, 12):
+	if midi_note < 48:
+		return get_low_oct(midi_note)
+
+	oct_count = 0
+	for i in range(48, 97, 12):
 		if midi_note == i:
-			return "c"
-	for i in range(25, 86, 12):
+			return "c" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(49, 86, 12):
 		if midi_note == i:
-			return "cis"
-	for i in range(26, 87, 12):
+			return "cis" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(50, 87, 12):
 		if midi_note == i:
-			return "d"
-	for i in range(27, 88, 12):
+			return "d" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(51, 88, 12):
 		if midi_note == i:
-			return "dis"
-	for i in range(28, 89, 12):
+			return "dis" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(52, 89, 12):
 		if midi_note == i:
-			return "e"
-	for i in range(29, 90, 12):
+			return "e" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(53, 90, 12):
 		if midi_note == i:
-			return "f"
-	for i in range(30, 91, 12):
+			return "f" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(54, 91, 12):
 		if midi_note == i:
-			return "fis"
-	for i in range(31, 92, 12):
+			return "fis" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(55, 92, 12):
 		if midi_note == i:
-			return "g"
-	for i in range(32, 93, 12):
+			return "g" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(56, 93, 12):
 		if midi_note == i:
-			return "gis"
-	for i in range(33, 94, 12):
+			return "gis" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(57, 94, 12):
 		if midi_note == i:
-			return "a"
-	for i in range(34, 95, 12):
+			return "a" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(58, 95, 12):
 		if midi_note == i:
-			return "ais"
-	for i in range(35, 96, 12):
+			return "ais" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	oct_count = 0
+	for i in range(59, 96, 12):
 		if midi_note == i:
-			return "b"
-# TODO: return different if key signature is sharp or flat
+			return "b" + "'"*oct_count
+		oct_count = oct_count + 1
+
+	# invalid midi note value
+	return ""
+# TODO add key signatures possibly
 
 
-# TODO def get_lily_note_lengths
+# returns lily pond code for corresponding note length in decimal form
+def get_lily_note_length(decimal_length):
+	# whole note
+	if isclose(decimal_length, 1, abs_tol=0.015):
+		return "1"
+	# dotted half note
+	if isclose(decimal_length, 0.75, abs_tol=0.015):
+		return "2."
+	# half note
+	if isclose(decimal_length, 0.5, abs_tol=0.015):
+		return "2"
+	# quarter note
+	if isclose(decimal_length, 0.25, abs_tol=0.015):
+		return "4"
+	# eight note
+	if isclose(decimal_length, 0.12, abs_tol=0.015):
+		return "8"
+	# invalid note length
+	else:
+		return ""
+	# TODO allow for more note lengths
 
 
-if __name__ == "__main__":
-	print_tests()
+def gen_lily(clef, time_sig):
+	file = "output.wav"
+	n = get_notes(file)
+	o = get_onsets(file)
+	b = get_bpm(file)
+
+	lengths = note_length(o, b, int(time_sig[2]))
+	all_notes = pair_value_length(n, lengths)
+
+	to_lily_pond(all_notes, time_sig, clef)
