@@ -178,7 +178,7 @@ class Listener:
 		lily_code = zip(lily_names, lily_lengths)
 
 		lily_file = open("my_lily.ly", "a")
-		lily_file.write("{\n\t\\time " + time_sig + "\n\t\\clef " + clef + "\n\t")
+		lily_file.write("{\n\t\\version \"2.20.0\" \n\t\\time " + time_sig + "\n\t\\clef " + clef + "\n\t")
 
 		lily_file.write(' '.join('%s%s' % x for x in lily_code))
 
@@ -294,7 +294,7 @@ class Listener:
 		# invalid midi note value
 		return ""
 
-	# TODO add key signatures possibly
+	# TODO add key signatures or option to write as flats
 
 	# returns lily pond code for corresponding note length in decimal form
 	@staticmethod
@@ -308,6 +308,9 @@ class Listener:
 		# half note
 		if isclose(decimal_length, 0.5, abs_tol=0.015):
 			return "2"
+		# dotted quarter note
+		if isclose(decimal_length, 0.37, abs_tol=0.015):
+			return "4."
 		# quarter note
 		if isclose(decimal_length, 0.25, abs_tol=0.015):
 			return "4"
@@ -315,10 +318,10 @@ class Listener:
 		if isclose(decimal_length, 0.12, abs_tol=0.015):
 			return "8"
 		# invalid note length
+		if isclose(decimal_length, 0.06, abs_tol=0.015):
+			return "16"
 		else:
 			return ""
-
-	# TODO allow for more note lengths
 
 	def gen_lily(self, clef, time_sig):
 		file = "output.wav"
