@@ -294,7 +294,7 @@ class Listener:
 		# invalid midi note value
 		return ""
 
-	# TODO add key signatures or option to write as flats
+	# TODO add key signature options or option to write as flats
 
 	# returns lily pond code for corresponding note length in decimal form
 	@staticmethod
