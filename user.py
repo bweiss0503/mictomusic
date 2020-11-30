@@ -8,6 +8,7 @@ import record_controller as rc
 
 class MicToMusic(Tk):
 	def __init__(self):
+		# TODO add image in top right of window
 		super().__init__()
 		self.listener = listen.Listener()
 		self.control = rc.RecordController(self.listener)
@@ -15,19 +16,19 @@ class MicToMusic(Tk):
 		self.geometry("600x700")
 
 		# label for clef drop down menu
-		self.clef_label = Label(self, text="Clef:")
-		self.clef_label.grid(row=0, column=0, sticky=W)
+		clef_label = Label(self, text="Clef:")
+		clef_label.grid(row=0, column=0, sticky=W)
 
 		# clef drop down menu, def value set to treble
 		self.clef_var = StringVar(self)
 		self.clef_var.set("treble")
-		self.clef_menu = OptionMenu(self, self.clef_var, "treble", "bass")
-		self.clef_menu.grid(row=0, column=1, columnspan=2, sticky=W)
+		clef_menu = OptionMenu(self, self.clef_var, "treble", "bass")
+		clef_menu.grid(row=0, column=1, columnspan=2, sticky=W)
 
 		# label for time signature menu
 		self.time_sig = StringVar()
-		self.time_label = Label(self, text="Time Signature:")
-		self.time_label.grid(row=1, column=0, columnspan=3, sticky=W)
+		time_label = Label(self, text="Time Signature:")
+		time_label.grid(row=1, column=0, columnspan=3, sticky=W)
 
 		# time signature text entry menu, default value of 4/4
 		self.time_sig_menu = Entry(self, width=4)
@@ -35,26 +36,26 @@ class MicToMusic(Tk):
 		self.time_sig_menu.grid(row=1, column=2, columnspan=1, sticky=W)
 
 		# record and stop recording buttons
-		self.record_b = Button(self, text="Record", command=lambda: self.record())
-		self.record_b.grid(row=2, column=0, columnspan=2, sticky=W)
-		self.stop_b = Button(self, text="Stop", command=lambda: self.stop_r())
-		self.stop_b.grid(row=2, column=1, sticky=W)
+		record_b = Button(self, text="Record", command=lambda: self.record())
+		record_b.grid(row=2, column=0, columnspan=2, sticky=W)
+		stop_b = Button(self, text="Stop", command=lambda: self.stop_r())
+		stop_b.grid(row=2, column=1, sticky=W)
 
 		# generate lily pond code button
-		self.gen = Button(
+		gen = Button(
 			self,
 			text="Generate Lilypond",
 			command=lambda: self.generate()
 		)
-		self.gen.grid(row=3, column=0, sticky=W, columnspan=2)
+		gen.grid(row=3, column=0, sticky=W, columnspan=2)
 
 		# write current contents of text widget to my_lily.ly
-		self.save_b = Button(self, text="Save Lilypond", command=lambda: self.save_file())
-		self.save_b.grid(row=3, column=2)
+		save_b = Button(self, text="Save Lilypond", command=lambda: self.save_file())
+		save_b.grid(row=3, column=2)
 
 		# open pdf of sheet music in system's default pdf viewer
-		self.b_open = Button(self, text="View Sheet Music", command=lambda: self.open_pdf())
-		self.b_open.grid(row=3, column=3, sticky=W)
+		b_open = Button(self, text="View Sheet Music", command=lambda: self.open_pdf())
+		b_open.grid(row=3, column=3, sticky=W)
 
 		# text widget that will display generated lily pond code
 		self.lily_edit = Text(self, width=600, height=600)
@@ -114,6 +115,3 @@ class MicToMusic(Tk):
 if __name__ == "__main__":
 	window = MicToMusic()
 	window.mainloop()
-
-# TODO add image in top right of window
-# TODO add note length optional command
